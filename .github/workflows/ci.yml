@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show compiler
+        run: ${{ matrix.cc }} --version
+
+      - name: Build tests
+        run: ${{ matrix.cc }} -std=c99 -Wall -Wextra -Wpedantic -Werror -Iinclude src/massert.c tests/test_all.c -o tests/test_all
+
+      - name: Run tests
+        run: ./tests/test_all
