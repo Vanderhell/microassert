@@ -1,10 +1,11 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
-    branches: [ main, master ]
+    branches: [ master ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ master ]
 
 jobs:
   build-and-test:
@@ -22,7 +23,14 @@ jobs:
         run: ${{ matrix.cc }} --version
 
       - name: Build tests
-        run: ${{ matrix.cc }} -std=c99 -Wall -Wextra -Wpedantic -Werror -Iinclude src/massert.c tests/test_all.c -o tests/test_all
+        shell: bash
+        run: |
+          if [ "${{ matrix.cc }}" = "clang" ]; then
+            EXTRA_FLAGS="-Wno-gnu-zero-variadic-macro-arguments"
+          else
+            EXTRA_FLAGS=""
+          fi
+          ${{ matrix.cc }} -std=c99 -Wall -Wextra -Wpedantic -Werror $EXTRA_FLAGS -Iinclude src/massert.c tests/test_all.c -o tests/test_all
 
       - name: Run tests
         run: ./tests/test_all

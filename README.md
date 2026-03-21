@@ -1,6 +1,6 @@
 # microassert
 
-[![CI](https://github.com/Vanderhell/microassert/actions/workflows/ci.yml/badge.svg)](https://github.com/Vanderhell/microassert/actions/workflows/ci.yml)
+[![CI](https://github.com/Vanderhell/microassert/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Vanderhell/microassert/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![C99](https://img.shields.io/badge/C-C99-blue.svg)](https://en.wikipedia.org/wiki/C99)
 
