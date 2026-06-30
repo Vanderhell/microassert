@@ -168,8 +168,7 @@ jobs:
         shell: bash
         run: |
           cmake -S . -B build-arm -G Ninja \
-            -DCMAKE_C_COMPILER=arm-none-eabi-gcc \
-            -DCMAKE_CXX_COMPILER=arm-none-eabi-g++ \
+            -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/cmake/arm-none-eabi-toolchain.cmake" \
             -DMICROASSERT_BUILD_TESTS=OFF \
             -DMICROASSERT_C_STANDARD=99
 
