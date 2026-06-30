@@ -12,7 +12,7 @@ if (COMPILER_ID STREQUAL "MSVC")
             /std:c11
             /W4
             /WX
-            /I"${INCLUDE_DIR}"
+            "/I${INCLUDE_DIR}"
             /c "${SOURCE_FILE}"
             /Fo"${output_file}"
         RESULT_VARIABLE result
