@@ -4,12 +4,11 @@
 
 This document records verification evidence already available in the repository history and user-provided CI output. It is not a release-readiness claim.
 
-## Last Full WSL Audit in Repository Artifacts
+## Verified Baseline
 
-- Audit report: `.wsl_audit/microassert_wsl_audit_20260630_165714.txt`
 - Audited commit: `0b2feb11a33e3af9335560a9266c7024ee19ff7f`
 
-Locally verified in that report:
+Locally verified before subsequent fixes:
 
 - direct GCC C99 strict runtime
 - direct GCC C11 strict runtime
@@ -28,7 +27,7 @@ Locally verified in that report:
 - `cppcheck` strict
 - ARM core compile-only
 
-Pending or failed in that report:
+At that point, the remaining pending or failing items were:
 
 - `clang-tidy` analyzer subset
 - `scan-build` CMake build
@@ -44,7 +43,7 @@ Subsequent tracked fixes were made for:
 - install-consumer toolchain and sanitizer flag propagation
 - README example `cppcheck` portability
 
-These fixes were based on user-provided CI output after the full WSL audit. They are not recorded here as fully closed until the user reruns the relevant jobs.
+These fixes were based on local verification and user-provided CI output after that baseline. They are not recorded here as fully closed until the relevant jobs are rerun.
 
 ## Current Pending User Re-Verification
 
@@ -55,6 +54,16 @@ The following items still require user rerun or fresh audit evidence after the l
 - Windows MSVC CTest matrix after compile-fail harness fixes
 - install-consumer path under sanitizer-enabled CI jobs
 - ARM CI job after the toolchain-file change
+
+## Publication Note
+
+The local verification artifacts are not published repository documentation and should not be treated as the public source of record.
+
+For published verification status, rely on:
+
+- documented verified commit references in this file
+- committed test and CI configuration in the repository
+- GitHub Actions results for rerun jobs on current commits
 
 ## Closeout Rule
 
