@@ -144,13 +144,13 @@ jobs:
         run: cl
 
       - name: Configure
-        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DMICROASSERT_C_STANDARD=11
+        run: cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl -DMICROASSERT_C_STANDARD=11
 
       - name: Build
-        run: cmake --build build --config Release
+        run: cmake --build build
 
       - name: Test
-        run: ctest --test-dir build -C Release --output-on-failure
+        run: ctest --test-dir build --output-on-failure
 
   arm-compile-only:
     runs-on: ubuntu-latest
