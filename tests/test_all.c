@@ -31,6 +31,8 @@ static massert_t *g_child_ma = NULL;
 static int g_side_effect_expr_calls = 0;
 static int g_side_effect_fmt_calls = 0;
 static int g_side_effect_code_calls = 0;
+static volatile int g_macro_if_branch = 0;
+static volatile int g_macro_should_warn = 0;
 
 static int tests_run = 0;
 static int tests_passed = 0;
@@ -143,9 +145,9 @@ static uint32_t fixed_clock(void)
 static FILE *massert_test_fopen(const char *path, const char *mode)
 {
 #ifdef _WIN32
-    FILE *file = NULL;
+    FILE *file;
     if (fopen_s(&file, path, mode) != 0) {
-        return NULL;
+        file = NULL;
     }
     return file;
 #else
@@ -341,6 +343,16 @@ static int compare_text_file(const char *path, const char *needle)
     fclose(file);
 
     return strstr(buffer, needle) != NULL;
+}
+
+static int macro_if_branch_zero(void)
+{
+    return g_macro_if_branch == 0;
+}
+
+static int macro_should_warn(void)
+{
+    return g_macro_should_warn != 0;
 }
 
 typedef struct {
@@ -971,9 +983,10 @@ TEST(test_macro_evaluation)
 TEST(test_unbraced_if_else_and_same_line_macros)
 {
     test_fixture_t fixture;
-    volatile int count = 0;
-    volatile int should_warn = 0;
+    int count = 0;
     g_hook_calls = 0;
+    g_macro_if_branch = 0;
+    g_macro_should_warn = 0;
     ASSERT_EQ(MASSERT_STATUS_OK, fixture_init(&fixture, 8u, 8u, fixed_clock, NULL, NULL, NULL, NULL));
     ASSERT_EQ(MASSERT_STATUS_OK, massert_init(NULL, &(massert_config_t){
         .hook_slots = fixture.hooks,
@@ -987,10 +1000,10 @@ TEST(test_unbraced_if_else_and_same_line_macros)
         .halt_ctx = NULL
     }));
     ASSERT_EQ(MASSERT_STATUS_OK, massert_add_hook(NULL, tracking_hook, NULL, NULL));
-    if (count == 0)
-        MASSERT_WARN(should_warn != 0, "first");
+    if (macro_if_branch_zero())
+        MASSERT_WARN(macro_should_warn(), "first");
     else
-        count++;
+        count = 1;
     MASSERT_WARN(0, "line one"); MASSERT_WARN(0, "line two");
     ASSERT_EQ(0, count);
     ASSERT_EQ(3, g_hook_calls);
