@@ -495,6 +495,7 @@ static void child_main(const char *case_name, char *log_path)
         massert_panic_halt(&fixture.ma, "halt.c", 1u, "halt", NULL, 0u, "halt");
     } else if (strcmp(case_name, "invalid_severity") == 0) {
         massert_set_halt(&fixture.ma, child_halt_log_then_exit, log_path);
+        /* NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange) */
         massert_fire(&fixture.ma, (massert_severity_t)99, "bad.c", 1u, "bad", NULL, 0u, "bad");
     } else if (strcmp(case_name, "nested_warn_warn") == 0) {
         massert_add_hook(&fixture.ma, hook_nested_warn, &fixture, NULL);
@@ -714,6 +715,8 @@ TEST(test_config_copy_by_value_and_independent_instances) {
     ASSERT_EQ(MASSERT_STATUS_OK, massert_add_hook(&fixture_b.ma, tracking_hook, hook_ctx_b, NULL));
     hook_ctx_a = &mutated_ctx;
     hook_ctx_b = &mutated_ctx;
+    ASSERT_TRUE(hook_ctx_a == &mutated_ctx);
+    ASSERT_TRUE(hook_ctx_b == &mutated_ctx);
 
     massert_fire(&fixture_a.ma, MASSERT_SEVERITY_WARN, "a.c", 1u, "a", NULL, 0u, "a");
     ASSERT_EQ(123456u, g_last_info.timestamp_ms);
