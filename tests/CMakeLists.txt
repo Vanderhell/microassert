@@ -38,21 +38,30 @@ set_target_properties(microassert_readme_example PROPERTIES
     C_EXTENSIONS OFF)
 microassert_enable_c_warnings(microassert_readme_example)
 
-function(add_compile_fail_test name source regex)
+function(add_compile_fail_test name source keyword)
+    if (MSVC)
+        set(regex "${source}\\([0-9]+\\):.*${keyword}")
+    else()
+        set(regex "${source}:[0-9]+:[0-9]+:.*${keyword}")
+    endif()
+
     add_test(NAME ${name}
         COMMAND ${CMAKE_COMMAND}
             -DCC=${CMAKE_C_COMPILER}
+            -DCOMPILER_ID=${CMAKE_C_COMPILER_ID}
             -DINCLUDE_DIR=${PROJECT_SOURCE_DIR}/include
             -DSOURCE_FILE=${PROJECT_SOURCE_DIR}/tests/fixtures/compile_fail/${source}
             -DREGEX=${regex}
             -P ${PROJECT_SOURCE_DIR}/tests/compile_fail.cmake)
 endfunction()
 
-add_compile_fail_test(bad_clock bad_clock.c "bad_clock\\.c:[0-9]+:[0-9]+:.*clock")
-add_compile_fail_test(bad_hook bad_hook.c "bad_hook\\.c:[0-9]+:[0-9]+:.*hook")
-add_compile_fail_test(bad_reset bad_reset.c "bad_reset\\.c:[0-9]+:[0-9]+:.*reset")
-add_compile_fail_test(bad_halt bad_halt.c "bad_halt\\.c:[0-9]+:[0-9]+:.*halt")
-add_compile_fail_test(bad_format bad_format.c "bad_format\\.c:[0-9]+:[0-9]+:.*format")
+add_compile_fail_test(bad_clock bad_clock.c "clock")
+add_compile_fail_test(bad_hook bad_hook.c "hook")
+add_compile_fail_test(bad_reset bad_reset.c "reset")
+add_compile_fail_test(bad_halt bad_halt.c "halt")
+if (CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    add_compile_fail_test(bad_format bad_format.c "format")
+endif()
 
 add_test(NAME install_consumer
     COMMAND ${CMAKE_COMMAND}
