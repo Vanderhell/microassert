@@ -157,23 +157,29 @@ static FILE *massert_test_fopen(const char *path, const char *mode)
 
 static void append_log_line(const char *path, const char *fmt, ...)
 {
+    char buffer[512];
     FILE *file;
     va_list args;
+    int rc;
 
     if (path == NULL) {
         return;
     }
 
-    va_start(args, fmt);
     file = massert_test_fopen(path, "ab");
     if (file == NULL) {
-        va_end(args);
         return;
     }
 
-    vfprintf(file, fmt, args);
+    va_start(args, fmt);
+    rc = vsnprintf(buffer, sizeof(buffer), fmt, args);
     va_end(args);
-    fputc('\n', file);
+
+    if (rc >= 0) {
+        fputs(buffer, file);
+        fputc('\n', file);
+    }
+
     fclose(file);
 }
 
