@@ -1,23 +1,32 @@
 # Design Rationale
 
-## 1. Hook chain instead of a single callback
-Multiple hooks fire in order. This lets you compose: log first, then dump, then flush. Each hook is independent and optional.
+## 1. Caller-Owned Storage
+The library does not allocate its own hook or history storage. The caller decides
+whether the instance is global, static, stack-based, or embedded in another
+object.
 
-## 2. Four severities, not two
-WARN = soft assert (log + continue). ERROR = serious but recoverable. FATAL = reset. HALT = infinite loop for debugger. This matches real-world needs better than just "assert or not."
+## 2. Retained History Is Copied, Not Borrowed
+Event data and retained history are separate. The live dispatch path can use
+temporary formatting buffers, while the history buffer stores bounded copies.
 
-## 3. Re-entrancy guard
-If a hook (e.g., nvlog_append) triggers another panic, the nested panic is suppressed. Without this, you get infinite recursion → stack overflow → real crash with no diagnostics.
+## 3. Four Severities
+`WARN` and `ERROR` continue after hooks run. `FATAL` requests reset, then halts
+if reset returns. `HALT` requests halt immediately. This is more precise than a
+binary assert-or-not model.
 
-## 4. Global singleton + instances
-Macros use the global for zero-config convenience. Separate instances for testing or library isolation.
+## 4. Deterministic Nested Panic Handling
+If a hook fires another `WARN` or `ERROR`, the nested event is counted and
+suppressed. If a hook fires `FATAL` or `HALT`, the terminal halt path is taken
+immediately.
 
-## 5. Location as compile-time option
-file/line/func strings consume ROM. On tiny MCUs, disable with MASSERT_ENABLE_LOCATION=0.
+## 5. Explicit Locations
+File, line, and function strings improve diagnostics. They can be disabled for
+size-constrained builds through `MASSERT_ENABLE_LOCATION`.
 
-| Decision | Gains | Costs |
-|----------|-------|-------|
-| Hook chain | Composable, ordered | Max 4 hooks |
-| Four severities | Granular response | One more enum to learn |
-| Re-entrancy guard | No infinite recursion | Nested panics silently dropped |
-| Location capture | Full diagnostics | ROM for string literals |
+| Decision | Gain | Cost |
+|----------|------|------|
+| Caller-owned storage | No hidden allocation | More setup |
+| Copied history | Stable retained records | Extra storage |
+| Four severities | Better control flow | One more concept |
+| Nested suppression | No recursive panic loop | Nested soft events are dropped |
+| Location capture | Better diagnostics | More ROM |

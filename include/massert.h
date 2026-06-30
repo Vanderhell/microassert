@@ -1,260 +1,220 @@
 /*
- * microassert — Unified panic & assert system for embedded systems.
- *
- * Replaces scattered assert(), while(1), and HardFault handlers with a
- * single, structured panic pipeline: capture context → log → dump → reset.
- * Bridges panicdump, nvlog, defer, and microlog.
- *
- * C99 · Zero dependencies · Zero allocations · Callback-driven · Portable
+ * microassert - deterministic panic/assert support for embedded C.
  *
  * SPDX-License-Identifier: MIT
- * https://github.com/Vanderhell/microassert
  */
 
-#ifndef MASSERT_H
-#define MASSERT_H
+#ifndef MICROASSERT_MASSERT_H
+#define MICROASSERT_MASSERT_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
-/* ── Configuration ─────────────────────────────────────────────────────── */
-
-/** Maximum number of panic hooks in the chain. */
-#ifndef MASSERT_MAX_HOOKS
-#define MASSERT_MAX_HOOKS 4
+#if defined(__clang__) || defined(__GNUC__)
+#define MICROASSERT_DETAIL_PRINTF_LIKE(format_index, first_arg_index) \
+    __attribute__((format(printf, format_index, first_arg_index)))
+#else
+#define MICROASSERT_DETAIL_PRINTF_LIKE(format_index, first_arg_index)
 #endif
 
-/** Maximum length of the panic message buffer. */
-#ifndef MASSERT_MSG_SIZE
-#define MASSERT_MSG_SIZE 96
+#if defined(_MSC_VER)
+#define MICROASSERT_DETAIL_NORETURN __declspec(noreturn)
+#elif defined(__cplusplus) && __cplusplus >= 201103L
+#define MICROASSERT_DETAIL_NORETURN [[noreturn]]
+#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+#define MICROASSERT_DETAIL_NORETURN _Noreturn
+#elif defined(__clang__) || defined(__GNUC__)
+#define MICROASSERT_DETAIL_NORETURN __attribute__((noreturn))
+#else
+#define MICROASSERT_DETAIL_NORETURN
 #endif
 
-/** Enable file/line capture in panic info. Set 0 to save ROM. */
-#ifndef MASSERT_ENABLE_LOCATION
-#define MASSERT_ENABLE_LOCATION 1
+#ifndef MICROASSERT_ENABLE_LOCATION
+#define MICROASSERT_ENABLE_LOCATION 1
 #endif
 
-/** Enable panic history (ring of last N panics). */
-#ifndef MASSERT_ENABLE_HISTORY
-#define MASSERT_ENABLE_HISTORY 1
-#endif
-
-/** Number of panic history entries. */
-#ifndef MASSERT_HISTORY_DEPTH
-#define MASSERT_HISTORY_DEPTH 4
-#endif
-
-/* ── Panic severity ────────────────────────────────────────────────────── */
+enum {
+    MASSERT_MESSAGE_CAPACITY = 128u,
+    MASSERT_TEXT_COPY_CAPACITY = 64u
+};
 
 typedef enum {
-    MASSERT_WARN    = 0,   /**< Log + continue (soft assert).            */
-    MASSERT_ERROR   = 1,   /**< Log + hooks fire, but continue.          */
-    MASSERT_FATAL   = 2,   /**< Log + hooks + reset (no return).         */
-    MASSERT_HALT    = 3,   /**< Log + hooks + infinite loop (debug).     */
+    MASSERT_SEVERITY_WARN = 0,
+    MASSERT_SEVERITY_ERROR = 1,
+    MASSERT_SEVERITY_FATAL = 2,
+    MASSERT_SEVERITY_HALT = 3
 } massert_severity_t;
 
-const char *massert_severity_str(massert_severity_t sev);
+typedef enum {
+    MASSERT_STATUS_OK = 0,
+    MASSERT_STATUS_INVALID_ARGUMENT = 1,
+    MASSERT_STATUS_INVALID_STATE = 2,
+    MASSERT_STATUS_BUSY = 3,
+    MASSERT_STATUS_FULL = 4
+} massert_status_t;
 
-/* ── Panic info ────────────────────────────────────────────────────────── */
-
-/** Captured context at the point of panic. */
 typedef struct {
-    massert_severity_t  severity;
-    uint32_t            timestamp_ms;
-#if MASSERT_ENABLE_LOCATION
-    const char         *file;            /**< Source file (or NULL).       */
-    uint32_t            line;            /**< Source line (or 0).          */
-    const char         *func;            /**< Function name (or NULL).     */
-#endif
-    const char         *expr;            /**< Failed expression (or NULL). */
-    char                msg[MASSERT_MSG_SIZE]; /**< Formatted message.     */
-    uint32_t            error_code;      /**< Optional app error code.     */
+    massert_severity_t severity;
+    uint32_t timestamp_ms;
+    const char *file;
+    uint32_t line;
+    const char *func;
+    const char *expr;
+    char msg[MASSERT_MESSAGE_CAPACITY];
+    uint32_t error_code;
+    bool message_truncated;
+    bool format_failed;
 } massert_info_t;
 
-/* ── Callbacks ─────────────────────────────────────────────────────────── */
+typedef struct {
+    massert_severity_t severity;
+    uint32_t timestamp_ms;
+    uint32_t line;
+    uint32_t error_code;
+    char file[MASSERT_TEXT_COPY_CAPACITY];
+    char func[MASSERT_TEXT_COPY_CAPACITY];
+    char expr[MASSERT_TEXT_COPY_CAPACITY];
+    char msg[MASSERT_MESSAGE_CAPACITY];
+    bool file_truncated;
+    bool func_truncated;
+    bool expr_truncated;
+    bool message_truncated;
+    bool format_failed;
+} massert_history_entry_t;
 
-/** Clock function — milliseconds uptime. */
-typedef uint32_t (*massert_clock_fn)(void);
-
-/**
- * Panic hook — called in sequence when a panic fires.
- *
- * Typical hooks:
- *   1. Log to microlog:  MLOG_ERROR("PANIC", "%s", info->msg);
- *   2. Write to nvlog:   nvlog_append(&log, info, sizeof(*info));
- *   3. Capture dump:     panicdump_save();
- *   4. Flush buffers:    uart_flush();
- *
- * Hooks must be short. On FATAL, the system resets after all hooks run.
- * On HALT, it enters an infinite loop after hooks.
- */
 typedef void (*massert_hook_fn)(const massert_info_t *info, void *ctx);
-
-/**
- * Reset function — called on FATAL severity after all hooks.
- * Should not return. Example: NVIC_SystemReset(), esp_restart().
- */
+typedef uint32_t (*massert_clock_fn)(void);
 typedef void (*massert_reset_fn)(void *ctx);
-
-/* ── Assert engine instance ────────────────────────────────────────────── */
+typedef void (*massert_halt_fn)(void *ctx);
 
 typedef struct {
-    massert_hook_fn   hooks[MASSERT_MAX_HOOKS];
-    void             *hook_ctx[MASSERT_MAX_HOOKS];
-    uint8_t           num_hooks;
+    massert_hook_fn hook;
+    void *ctx;
+} massert_hook_slot_t;
 
-    massert_clock_fn  clock;
-    massert_reset_fn  reset_fn;
-    void             *reset_ctx;
+typedef struct {
+    massert_hook_slot_t *hook_slots;
+    size_t hook_capacity;
+    massert_history_entry_t *history_entries;
+    size_t history_capacity;
+    massert_clock_fn clock_fn;
+    massert_reset_fn reset_fn;
+    void *reset_ctx;
+    massert_halt_fn halt_fn;
+    void *halt_ctx;
+} massert_config_t;
 
-    uint32_t          panic_count;       /**< Total panics since init.     */
-    uint32_t          warn_count;
-    uint32_t          error_count;
-    uint32_t          fatal_count;
+typedef struct {
+    uint32_t magic;
 
-    bool              in_panic;          /**< Re-entrancy guard.           */
+    massert_hook_slot_t *hook_slots;
+    size_t hook_capacity;
+    size_t hook_count;
 
-#if MASSERT_ENABLE_HISTORY
-    massert_info_t    history[MASSERT_HISTORY_DEPTH];
-    uint8_t           hist_head;
-    uint8_t           hist_count;
-#endif
+    massert_history_entry_t *history_entries;
+    size_t history_capacity;
+    size_t history_head;
+    size_t history_count;
+
+    massert_clock_fn clock_fn;
+    massert_reset_fn reset_fn;
+    void *reset_ctx;
+    massert_halt_fn halt_fn;
+    void *halt_ctx;
+
+    uint32_t total_count;
+    uint32_t warn_count;
+    uint32_t error_count;
+    uint32_t fatal_count;
+    uint32_t halt_count;
+    uint32_t nested_suppressed_count;
+
+    bool in_panic;
 } massert_t;
 
-/* ── Global instance ───────────────────────────────────────────────────── */
+const char *massert_severity_str(massert_severity_t severity);
 
-/** Get the global assert engine singleton. */
 massert_t *massert_global(void);
 
-/* ── Init ──────────────────────────────────────────────────────────────── */
+massert_status_t massert_init(massert_t *ma, const massert_config_t *config);
+massert_status_t massert_set_reset(massert_t *ma, massert_reset_fn fn, void *ctx);
+massert_status_t massert_set_halt(massert_t *ma, massert_halt_fn fn, void *ctx);
+massert_status_t massert_add_hook(massert_t *ma, massert_hook_fn fn, void *ctx, size_t *slot_index);
+massert_status_t massert_clear_hooks(massert_t *ma);
 
-/**
- * Initialise assert engine.
- * @param ma     Instance (caller-allocated, or NULL for global).
- * @param clock  Clock function (may be NULL — timestamps will be 0).
- */
-void massert_init(massert_t *ma, massert_clock_fn clock);
-
-/** Set reset function for FATAL panics. */
-void massert_set_reset(massert_t *ma, massert_reset_fn fn, void *ctx);
-
-/**
- * Add a panic hook to the chain. Hooks fire in registration order.
- * @return Hook index (0-based) or -1 if full.
- */
-int massert_add_hook(massert_t *ma, massert_hook_fn fn, void *ctx);
-
-/** Remove all hooks. */
-void massert_clear_hooks(massert_t *ma);
-
-/* ── Core panic function ───────────────────────────────────────────────── */
-
-/**
- * Fire a panic. This is the core function — all macros call this.
- *
- * @param ma        Instance (NULL = global).
- * @param severity  WARN, ERROR, FATAL, or HALT.
- * @param file      Source file (or NULL).
- * @param line      Source line (or 0).
- * @param func      Function name (or NULL).
- * @param expr      Failed expression string (or NULL).
- * @param code      Application error code (or 0).
- * @param fmt       Printf-style message (or NULL).
- */
 void massert_fire(massert_t *ma, massert_severity_t severity,
-                   const char *file, uint32_t line, const char *func,
-                   const char *expr, uint32_t code,
-                   const char *fmt, ...);
+                  const char *file, uint32_t line, const char *func,
+                  const char *expr, uint32_t code,
+                  const char *fmt, ...) MICROASSERT_DETAIL_PRINTF_LIKE(8, 9);
 
-/* ── Query ─────────────────────────────────────────────────────────────── */
+MICROASSERT_DETAIL_NORETURN void massert_panic_fatal(
+    massert_t *ma, const char *file, uint32_t line, const char *func,
+    const char *expr, uint32_t code,
+    const char *fmt, ...) MICROASSERT_DETAIL_PRINTF_LIKE(7, 8);
 
-/** Total panic count. */
-uint32_t massert_panic_count(const massert_t *ma);
+MICROASSERT_DETAIL_NORETURN void massert_panic_halt(
+    massert_t *ma, const char *file, uint32_t line, const char *func,
+    const char *expr, uint32_t code,
+    const char *fmt, ...) MICROASSERT_DETAIL_PRINTF_LIKE(7, 8);
 
-/** Count by severity. */
+uint32_t massert_total_count(const massert_t *ma);
 uint32_t massert_warn_count(const massert_t *ma);
 uint32_t massert_error_count(const massert_t *ma);
 uint32_t massert_fatal_count(const massert_t *ma);
+uint32_t massert_halt_count(const massert_t *ma);
+uint32_t massert_nested_suppressed_count(const massert_t *ma);
 
-#if MASSERT_ENABLE_HISTORY
-/** Number of stored panic history entries. */
-uint8_t massert_history_count(const massert_t *ma);
+size_t massert_history_count(const massert_t *ma);
+const massert_history_entry_t *massert_history_at(const massert_t *ma, size_t offset);
 
-/**
- * Get panic history entry (0 = most recent).
- * @return Pointer to entry, or NULL if offset >= count.
- */
-const massert_info_t *massert_history_at(const massert_t *ma, uint8_t offset);
+#define MICROASSERT_DETAIL_LOC_ARGS \
+    __FILE__, (uint32_t)__LINE__, __func__
+
+#if !MICROASSERT_ENABLE_LOCATION
+#undef MICROASSERT_DETAIL_LOC_ARGS
+#define MICROASSERT_DETAIL_LOC_ARGS NULL, 0u, NULL
 #endif
 
-/* ── Convenience macros ────────────────────────────────────────────────── */
-
-#if MASSERT_ENABLE_LOCATION
-#define MASSERT_LOC_ARGS  __FILE__, (uint32_t)__LINE__, __func__
-#else
-#define MASSERT_LOC_ARGS  NULL, 0, NULL
-#endif
-
-/**
- * MASSERT(expr) — assert that expr is true. FATAL if false.
- *
- * Usage: MASSERT(ptr != NULL);
- */
-#define MASSERT(expr)                                                     \
-    do {                                                                   \
-        if (!(expr)) {                                                     \
-            massert_fire(NULL, MASSERT_FATAL, MASSERT_LOC_ARGS,            \
-                         #expr, 0, "assertion failed: %s", #expr);         \
-        }                                                                  \
+#define MASSERT(expr) \
+    do { \
+        if (!(expr)) { \
+            massert_panic_fatal(NULL, MICROASSERT_DETAIL_LOC_ARGS, \
+                                #expr, 0u, "assertion failed: %s", #expr); \
+        } \
     } while (0)
 
-/**
- * MASSERT_MSG(expr, fmt, ...) — assert with a custom message.
- *
- * Usage: MASSERT_MSG(len > 0, "invalid length: %d", len);
- */
-#define MASSERT_MSG(expr, fmt, ...)                                       \
-    do {                                                                   \
-        if (!(expr)) {                                                     \
-            massert_fire(NULL, MASSERT_FATAL, MASSERT_LOC_ARGS,            \
-                         #expr, 0, fmt, ##__VA_ARGS__);                    \
-        }                                                                  \
+#define MASSERT_MSG(expr, ...) \
+    do { \
+        if (!(expr)) { \
+            massert_panic_fatal(NULL, MICROASSERT_DETAIL_LOC_ARGS, \
+                                #expr, 0u, __VA_ARGS__); \
+        } \
     } while (0)
 
-/**
- * MASSERT_WARN(expr, fmt, ...) — soft assert: log + continue.
- */
-#define MASSERT_WARN(expr, fmt, ...)                                      \
-    do {                                                                   \
-        if (!(expr)) {                                                     \
-            massert_fire(NULL, MASSERT_WARN, MASSERT_LOC_ARGS,             \
-                         #expr, 0, fmt, ##__VA_ARGS__);                    \
-        }                                                                  \
+#define MASSERT_WARN(expr, ...) \
+    do { \
+        if (!(expr)) { \
+            massert_fire(NULL, MASSERT_SEVERITY_WARN, MICROASSERT_DETAIL_LOC_ARGS, \
+                         #expr, 0u, __VA_ARGS__); \
+        } \
     } while (0)
 
-/**
- * MPANIC(fmt, ...) — unconditional fatal panic.
- *
- * Usage: MPANIC("out of memory: needed %d bytes", size);
- */
-#define MPANIC(fmt, ...)                                                  \
-    massert_fire(NULL, MASSERT_FATAL, MASSERT_LOC_ARGS,                    \
-                 NULL, 0, fmt, ##__VA_ARGS__)
+#define MPANIC(...) \
+    massert_panic_fatal(NULL, MICROASSERT_DETAIL_LOC_ARGS, NULL, 0u, __VA_ARGS__)
 
-/**
- * MPANIC_CODE(code, fmt, ...) — panic with application error code.
- */
-#define MPANIC_CODE(code, fmt, ...)                                       \
-    massert_fire(NULL, MASSERT_FATAL, MASSERT_LOC_ARGS,                    \
-                 NULL, (code), fmt, ##__VA_ARGS__)
+#define MPANIC_CODE(code, ...) \
+    massert_panic_fatal(NULL, MICROASSERT_DETAIL_LOC_ARGS, NULL, (uint32_t)(code), __VA_ARGS__)
+
+#define MPANIC_HALT(...) \
+    massert_panic_halt(NULL, MICROASSERT_DETAIL_LOC_ARGS, NULL, 0u, __VA_ARGS__)
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* MASSERT_H */
+#endif /* MICROASSERT_MASSERT_H */

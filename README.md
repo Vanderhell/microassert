@@ -4,96 +4,106 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![C99](https://img.shields.io/badge/C-C99-blue.svg)](https://en.wikipedia.org/wiki/C99)
 
-Unified panic and assert system for embedded systems.
-
-C99, zero dependencies, zero allocations, hook-chain architecture, portable.
-
-## Why microassert?
-
-Embedded projects often end up with fragmented failure handling:
-`assert()`, `while(1)`, ad-hoc reset calls, and missing diagnostics.
-
-`microassert` provides one panic pipeline:
-
-1. Capture context (file, line, function, message, timestamp)
-2. Execute hooks (log, dump, persist, flush)
-3. Continue, reset, or halt based on severity
+`microassert` is a small assert and panic library for C and C++ consumers.
+It has no third-party dependencies and formats messages with the standard
+C library `vsnprintf`.
 
 ## Features
 
-- Four severities: `WARN`, `ERROR`, `FATAL`, `HALT`
-- Hook chain with configurable order
-- Panic context capture and formatted messages
-- Re-entrancy guard for nested panic scenarios
-- Optional panic history ring buffer
-- Global singleton plus instance-based API
-- Compile-time switches for footprint control
+- explicit, status-returning initialization
+- caller-owned hook storage and retained history storage
+- WARN, ERROR, FATAL, and HALT severities
+- copied history entries with bounded text buffers
+- deterministic nested-panic handling and terminal callbacks
+- C99 minimum, C11-compatible source
+- C and C++ header compatibility
 
 ## Quick Start
 
 ```c
 #include "massert.h"
 
-static uint32_t clock_ms(void) { return HAL_GetTick(); }
+static uint32_t clock_ms(void)
+{
+    return 1234u;
+}
 
-static void log_hook(const massert_info_t *info, void *ctx) {
+static void reset_cb(void *ctx)
+{
     (void)ctx;
-    // route info->msg / info->severity to your logger
 }
 
-int main(void) {
-    massert_t *ma = massert_global();
-    massert_init(ma, clock_ms);
-    massert_add_hook(ma, log_hook, NULL);
+static void halt_cb(void *ctx)
+{
+    (void)ctx;
+}
 
-    MASSERT(1 == 1);
-    MASSERT_WARN(2 == 3, "non-fatal mismatch");
-    MASSERT_MSG(4 == 5, "fatal mismatch: %d != %d", 4, 5);
+int main(void)
+{
+    massert_hook_slot_t hooks[2];
+    massert_history_entry_t history[4];
+    massert_t ma;
+    massert_config_t config = {
+        hooks,
+        2u,
+        history,
+        4u,
+        clock_ms,
+        reset_cb,
+        NULL,
+        halt_cb,
+        NULL
+    };
 
-    return 0;
+    if (massert_init(&ma, &config) != MASSERT_STATUS_OK) {
+        return 1;
+    }
+
+    MASSERT_WARN(1 == 1, "not reached");
+    MASSERT_MSG(2 == 3, "mismatch: %d", 3);
+    MPANIC("fatal condition");
 }
 ```
 
-## Build and Test
+## Build
 
-From repository root:
-
-```bash
-clang -std=c99 -Wall -Wextra -Wpedantic -Werror -Iinclude src/massert.c tests/test_all.c -o tests/test_all
-./tests/test_all
-```
-
-On Linux with GCC:
+Direct Makefile workflow:
 
 ```bash
-gcc -std=c99 -Wall -Wextra -Wpedantic -Werror -Iinclude src/massert.c tests/test_all.c -o tests/test_all
-./tests/test_all
+mingw32-make test
 ```
 
-## Configuration
+CMake workflow:
 
-| Macro | Default | Description |
-|---|---:|---|
-| `MASSERT_MAX_HOOKS` | `4` | Maximum hooks in chain |
-| `MASSERT_MSG_SIZE` | `96` | Message buffer size |
-| `MASSERT_ENABLE_LOCATION` | `1` | Capture file/line/function |
-| `MASSERT_ENABLE_HISTORY` | `1` | Store panic history |
-| `MASSERT_HISTORY_DEPTH` | `4` | History ring size |
+```bash
+cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
+cmake --build build
+ctest --test-dir build --output-on-failure
+cmake --install build --prefix /tmp/microassert-install
+```
+
+## Public API
+
+- `massert_init()` validates caller storage and copies callbacks by value.
+- `massert_set_reset()` and `massert_set_halt()` reject mutation while a panic is active.
+- `massert_fire()` routes WARN and ERROR back to the caller, while FATAL and HALT are terminal.
+- `massert_panic_fatal()` calls reset, then halt if reset returns, then spins.
+- `massert_panic_halt()` calls halt, then spins if halt returns.
+- `massert_history_at()` returns retained copied history, valid until overwritten or reinit.
+
+## Notes
+
+- Hooks are best-effort and do not guarantee logging, persistence, or flushing.
+- The global singleton is deterministic, but the library is not thread-safe.
+- FATAL and HALT do not unwind C frames or run C++ destructors.
+- Hardware fault handling, signals, and power-loss recovery are outside the library contract.
 
 ## Documentation
 
 - [API reference](docs/API_REFERENCE.md)
 - [Design notes](docs/DESIGN.md)
 - [Porting guide](docs/PORTING_GUIDE.md)
-- [Contributing](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
-
-## Ecosystem Integrations
-
-- [microlog](https://github.com/Vanderhell/microlog)
-- [nvlog](https://github.com/Vanderhell/nvlog)
-- [panicdump](https://github.com/Vanderhell/panicdump)
-- [microboot](https://github.com/Vanderhell/microboot)
 
 ## License
 

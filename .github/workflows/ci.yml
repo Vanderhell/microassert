@@ -8,29 +8,173 @@ on:
     branches: [ master ]
 
 jobs:
-  build-and-test:
+  linux-build-test:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        cc: [gcc, clang]
+        include:
+          - cc: gcc
+            cxx: g++
+            c_standard: 99
+          - cc: gcc
+            cxx: g++
+            c_standard: 11
+          - cc: clang
+            cxx: clang++
+            c_standard: 99
+          - cc: clang
+            cxx: clang++
+            c_standard: 11
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Show compiler
-        run: ${{ matrix.cc }} --version
+        run: |
+          ${{ matrix.cc }} --version
+          ${{ matrix.cxx }} --version
 
-      - name: Build tests
+      - name: Configure
         shell: bash
         run: |
-          if [ "${{ matrix.cc }}" = "clang" ]; then
-            EXTRA_FLAGS="-Wno-gnu-zero-variadic-macro-arguments"
-          else
-            EXTRA_FLAGS=""
-          fi
-          ${{ matrix.cc }} -std=c99 -Wall -Wextra -Wpedantic -Werror $EXTRA_FLAGS -Iinclude src/massert.c tests/test_all.c -o tests/test_all
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+            -DMICROASSERT_C_STANDARD=${{ matrix.c_standard }} \
+            -DCMAKE_BUILD_TYPE=Release
 
-      - name: Run tests
-        run: ./tests/test_all
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Install
+        run: cmake --install build --prefix "${{ github.workspace }}/_install"
+
+  linux-sanitizers:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - cc: gcc
+            cxx: g++
+            flags: -fsanitize=address -fno-omit-frame-pointer
+          - cc: gcc
+            cxx: g++
+            flags: -fsanitize=undefined
+          - cc: gcc
+            cxx: g++
+            flags: -fsanitize=address,undefined -fno-omit-frame-pointer
+          - cc: clang
+            cxx: clang++
+            flags: -fsanitize=address -fno-omit-frame-pointer
+          - cc: clang
+            cxx: clang++
+            flags: -fsanitize=undefined
+          - cc: clang
+            cxx: clang++
+            flags: -fsanitize=address,undefined -fno-omit-frame-pointer
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install tools
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build gcc g++ clang
+
+      - name: Configure
+        shell: bash
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+            -DMICROASSERT_C_STANDARD=99 \
+            -DCMAKE_C_FLAGS="${{ matrix.flags }}" \
+            -DCMAKE_CXX_FLAGS="${{ matrix.flags }}"
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install tools
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build clang clang-tidy cppcheck clang-tools
+
+      - name: Configure
+        shell: bash
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DMICROASSERT_C_STANDARD=99 \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: Clang Tidy
+        run: |
+          clang-tidy -p build src/massert.c
+          clang-tidy -p build tests/test_all.c
+
+      - name: Cppcheck
+        run: cppcheck --project=build/compile_commands.json --enable=warning,style,performance,portability --error-exitcode=1 --inline-suppr
+
+      - name: Scan Build
+        run: scan-build --status-bugs cmake --build build
+
+  windows-msvc:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: MSVC Dev Cmd
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Show compiler
+        run: cl
+
+      - name: Configure
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DMICROASSERT_C_STANDARD=11
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+
+  arm-compile-only:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build gcc-arm-none-eabi
+
+      - name: Show compiler
+        run: arm-none-eabi-gcc --version
+
+      - name: Configure
+        shell: bash
+        run: |
+          cmake -S . -B build-arm -G Ninja \
+            -DCMAKE_C_COMPILER=arm-none-eabi-gcc \
+            -DCMAKE_CXX_COMPILER=arm-none-eabi-g++ \
+            -DMICROASSERT_BUILD_TESTS=OFF \
+            -DMICROASSERT_C_STANDARD=99
+
+      - name: Build
+        run: cmake --build build-arm
+
+      - name: Compile Consumer
+        run: arm-none-eabi-gcc -std=c99 -Wall -Wextra -Wpedantic -Werror -Iinclude -c tests/fixtures/readme_example/main.c -o build-arm/readme_example.o

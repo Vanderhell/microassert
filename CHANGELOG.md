@@ -1,13 +1,9 @@
 # Changelog
 
-## [1.0.0] — 2026-03-20
+## Unreleased
 
-### Added
-- Four severity levels: WARN, ERROR, FATAL, HALT.
-- Hook chain (up to 4 hooks, fire in order).
-- Context capture: file, line, function, expression, message, error code, timestamp.
-- Re-entrancy guard against recursive panics.
-- Panic history ring buffer.
-- Convenience macros: MASSERT, MASSERT_MSG, MASSERT_WARN, MPANIC, MPANIC_CODE.
-- Global singleton + independent instances.
-- 33 tests covering all severities, hooks, history, re-entrancy.
+- Reworked the public ABI around explicit initialization and caller-owned storage.
+- Added separated live event data, retained copied history, and deterministic nested panic handling.
+- Added CMake install/export support, a Makefile workflow, and consumer verification tests.
+- Expanded the runtime and compile-fail test coverage.
+- Updated the public documentation to match the repaired API.
