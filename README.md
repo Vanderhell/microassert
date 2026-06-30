@@ -101,8 +101,13 @@ cmake --install build --prefix /tmp/microassert-install
 ## Documentation
 
 - [API reference](docs/API_REFERENCE.md)
+- [Cookbook](docs/COOKBOOK.md)
 - [Design notes](docs/DESIGN.md)
 - [Porting guide](docs/PORTING_GUIDE.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [Verification notes](docs/VERIFICATION.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
 - [Changelog](CHANGELOG.md)
 
 ## License

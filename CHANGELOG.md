@@ -7,3 +7,4 @@
 - Added CMake install/export support, a Makefile workflow, and consumer verification tests.
 - Expanded the runtime and compile-fail test coverage.
 - Updated the public documentation to match the repaired API.
+- Added closeout documentation for cookbook usage, troubleshooting, verification status, contribution rules, security notes, and future tag-triggered release workflow.
