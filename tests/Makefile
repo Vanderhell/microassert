@@ -1,5 +1,8 @@
 CC      ?= gcc
-CFLAGS  := -std=c99 -Wall -Wextra -Wpedantic -Werror -I../include
+CPPFLAGS ?= -I../include
+CFLAGS  ?= -std=c99 -Wall -Wextra -Wpedantic -Werror
+LDFLAGS ?=
+LDLIBS  ?=
 SRC     := ../src/massert.c
 TESTS   := test_all.c
 
@@ -9,7 +12,7 @@ all: test_all
 	@./test_all
 
 test_all: $(TESTS) $(SRC) ../include/massert.h
-	$(CC) $(CFLAGS) $(SRC) $(TESTS) -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(SRC) $(TESTS) $(LDFLAGS) $(LDLIBS) -o $@
 
 clean:
-	rm -f test_all
+	$(RM) test_all

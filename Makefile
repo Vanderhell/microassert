@@ -1,10 +1,10 @@
 CC ?= gcc
-CPPFLAGS ?=
-CFLAGS ?= -std=c99 -Wall -Wextra -Wpedantic -Werror -Iinclude
+CPPFLAGS ?= -Iinclude
+CFLAGS ?= -std=c99 -Wall -Wextra -Wpedantic -Werror
 LDFLAGS ?=
 LDLIBS ?=
 
-TARGET := tests/test_all.exe
+TARGET := tests/test_all
 SOURCES := src/massert.c tests/test_all.c
 
 .PHONY: all test clean

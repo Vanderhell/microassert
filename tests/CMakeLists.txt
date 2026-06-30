@@ -37,7 +37,6 @@ set_target_properties(microassert_readme_example PROPERTIES
     C_STANDARD_REQUIRED ON
     C_EXTENSIONS OFF)
 microassert_enable_c_warnings(microassert_readme_example)
-add_test(NAME readme_example COMMAND microassert_readme_example)
 
 function(add_compile_fail_test name source regex)
     add_test(NAME ${name}

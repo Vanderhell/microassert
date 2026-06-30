@@ -29,3 +29,5 @@ Thumbs.db
 
 git.txt
 /prompts
+/.wsl_audit
+wsl_microassert_audit.sh

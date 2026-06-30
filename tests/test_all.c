@@ -142,9 +142,8 @@ static uint32_t fixed_clock(void)
 
 static FILE *massert_test_fopen(const char *path, const char *mode)
 {
-    FILE *file = NULL;
-
 #ifdef _WIN32
+    FILE *file = NULL;
     if (fopen_s(&file, path, mode) != 0) {
         return NULL;
     }
@@ -163,12 +162,13 @@ static void append_log_line(const char *path, const char *fmt, ...)
         return;
     }
 
+    va_start(args, fmt);
     file = massert_test_fopen(path, "ab");
     if (file == NULL) {
+        va_end(args);
         return;
     }
 
-    va_start(args, fmt);
     vfprintf(file, fmt, args);
     va_end(args);
     fputc('\n', file);
@@ -207,10 +207,11 @@ static massert_info_t g_last_info;
 static int g_hook_calls = 0;
 static int g_hook2_calls = 0;
 static int g_hook3_calls = 0;
-static int g_mutation_status = MASSERT_STATUS_OK;
+static massert_status_t g_mutation_status = MASSERT_STATUS_OK;
 static size_t g_mutation_slot = 0u;
 static int g_ctx_value = 0;
 
+/* cppcheck-suppress constParameterCallback */
 static void tracking_hook(const massert_info_t *info, void *ctx)
 {
     g_last_info = *info;
@@ -970,7 +971,8 @@ TEST(test_macro_evaluation)
 TEST(test_unbraced_if_else_and_same_line_macros)
 {
     test_fixture_t fixture;
-    int count = 0;
+    volatile int count = 0;
+    volatile int should_warn = 0;
     g_hook_calls = 0;
     ASSERT_EQ(MASSERT_STATUS_OK, fixture_init(&fixture, 8u, 8u, fixed_clock, NULL, NULL, NULL, NULL));
     ASSERT_EQ(MASSERT_STATUS_OK, massert_init(NULL, &(massert_config_t){
@@ -986,10 +988,11 @@ TEST(test_unbraced_if_else_and_same_line_macros)
     }));
     ASSERT_EQ(MASSERT_STATUS_OK, massert_add_hook(NULL, tracking_hook, NULL, NULL));
     if (count == 0)
-        MASSERT_WARN(0, "first");
+        MASSERT_WARN(should_warn != 0, "first");
     else
         count++;
     MASSERT_WARN(0, "line one"); MASSERT_WARN(0, "line two");
+    ASSERT_EQ(0, count);
     ASSERT_EQ(3, g_hook_calls);
 }
 

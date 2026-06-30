@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.20)
 project(microassert VERSION 0.0.0 LANGUAGES C CXX)
 
 include(CMakePackageConfigHelpers)
+include(CTest)
 include(GNUInstallDirs)
 
 option(MICROASSERT_BUILD_TESTS "Build microassert tests" ON)
@@ -62,7 +63,7 @@ set_target_properties(microassert PROPERTIES
 
 microassert_enable_c_warnings(microassert)
 
-if (MICROASSERT_BUILD_TESTS)
+if (MICROASSERT_BUILD_TESTS AND BUILD_TESTING)
     enable_testing()
     add_subdirectory(tests)
 endif()
